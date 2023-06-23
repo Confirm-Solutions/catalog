@@ -12,7 +12,7 @@ from streaming import StreamingDataset
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-import obvcomp.cli as cli
+import catalog.cli as cli
 
 
 @dataclass

@@ -15,8 +15,8 @@ import typer
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-import obvcomp.cli as cli
-import obvcomp.util as util
+import catalog.cli as cli
+import catalog.util as util
 
 
 @dataclass

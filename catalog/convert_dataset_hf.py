@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
-from obvcomp.cli import dataclass_cli
+from catalog.cli import dataclass_cli
 
 # ------------------------------------------------------------------------------
 # copied from llmfoundry:
