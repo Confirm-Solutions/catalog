@@ -1,0 +1,33 @@
+*.model
+*.pth
+*.chk
+*.log
+*.pkl
+*.pt
+*-ubyte
+*.gz
+*.txt
+!requirements.txt
+!requirements-*.txt
+!requirements_*.txt
+*.lprof
+wandb
+lightning_logs
+__pycache__
+*.ckpt
+latest
+*.zstd
+*.mds*
+*index.json
+*.csv
+*.npy
+*.parquet
+
+# duckdb
+*.db
+*.db.wal
+
+# sops
+.env
+
+playground*.ipynb
