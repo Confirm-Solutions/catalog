@@ -1,4 +1,4 @@
-name: obvious
+name: catalog
 channels:
   - conda-forge
 dependencies:

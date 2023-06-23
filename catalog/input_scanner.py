@@ -37,13 +37,6 @@ class StreamingTextDataset(StreamingDataset):
 
 
 def get_model(name: str):
-    return (
-        transformers.GPTNeoXForCausalLM.from_pretrained(
-            name, low_cpu_mem_usage=True, torch_dtype=torch.float16
-        )
-        .cuda()
-        .eval()
-    )
 
 
 def step1_scan(cfg: Config):
@@ -66,7 +59,13 @@ def step1_scan(cfg: Config):
     )
     n_batch = int(np.ceil(len(dataset) / cfg.batch_size))
 
-    model = get_model(cfg.model_name)
+    model = (
+        transformers.GPTNeoXForCausalLM.from_pretrained(
+            cfg.model_name, low_cpu_mem_usage=True, torch_dtype=torch.float16
+        )
+        .cuda()
+        .eval()
+    )
     os.makedirs(cfg.work_dir, exist_ok=True)
 
     n_iters = min(n_batch, cfg.batches)

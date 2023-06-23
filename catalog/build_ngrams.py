@@ -16,7 +16,6 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 import catalog.cli as cli
-import catalog.util as util
 
 
 @dataclass
@@ -255,6 +254,18 @@ def step5_trigrams(cfg: Config):
     for i in tqdm(range(cfg.id0_chunks)):
         db.execute(f"""INSERT INTO trigrams SELECT * FROM trigrams_{i}""")
 
+def add_tokens(df, db):
+    if not isinstance(df, pd.DataFrame):
+        df = df.df()
+    tokens_df = db.query("select * from tokens").df()
+    d = max([int(c[2:]) for c in df.columns if c.startswith("id")]) + 1
+    for i in range(d):
+        df[f"token{i}"] = tokens_df.loc[df[f"id{i}"], "token"].values
+    df["seq"] = df["token0"]
+    for i in range(1, d):
+        df["seq"] += df[f"token{i}"]
+    return df
+
 
 def step6_dataset(cfg: Config):
     db = duckdb.connect(cfg.db_filename)
@@ -275,7 +286,7 @@ def step6_dataset(cfg: Config):
     top_bi_df = db.query(
         f"select * from bigram_prefixes where frac_max > {threshold}"
     ).df()
-    top_bi_df = util.add_tokens(top_bi_df, db)
+    top_bi_df = add_tokens(top_bi_df, db)
     top_bi_df.to_parquet(os.path.join(cfg.work_dir, "top_bigrams.parquet"))
 
     # Construct trigram dataset consisting of the (id0, id1) prefixes that are
@@ -289,9 +300,8 @@ def step6_dataset(cfg: Config):
             order by frac_max desc
     """
     ).df()
-    top_tri_df = util.add_tokens(top_tri_df, db)
+    top_tri_df = add_tokens(top_tri_df, db)
     top_tri_df.to_parquet(os.path.join(cfg.work_dir, "top_trigrams.parquet"))
-
 
 def predict_all_models(df):
     for batch_size, param_str in [
@@ -304,10 +314,16 @@ def predict_all_models(df):
         (256, "6.9b"),
         (128, "12b"),
     ]:
-        model_info = util.model_cfg(param_str)
         print("starting", model_info.name)
         start = time.time()
-        model = model_info.get_hf_model()
+        with torch.device("cuda"):
+            model = (
+                transformers.GPTNeoXForCausalLM.from_pretrained(
+                    f"EleutherAI/pythia-{param_str}-deduped", low_cpu_mem_usage=True, torch_dtype=torch.float16
+                )
+                .cuda()
+                .eval()
+            )
         print(f"Loading model took {time.time() - start}")
 
         start = time.time()
@@ -375,15 +391,15 @@ def step8_huggingface(cfg: Config):
     """
     Push tables to huggingface
     """
-    os.makedirs(f"{cfg.work_dir}/to_hf", exist_ok=True)
+    pass
+    # os.makedirs(f"{cfg.work_dir}/to_hf", exist_ok=True)
 
-    for fn in ["top_bigrams", "top_trigrams"]:
-        dset = datasets.Dataset(
-            pq.read_table(f"{cfg.work_dir}/{fn}_p.parquet", memory_map=True)
-        )
-        dset.push_to_hub(f"Confirm-Labs/pile_{fn}", split=fn)
+    # for fn in ["top_bigrams", "top_trigrams"]:
+    #     dset = datasets.Dataset(
+    #         pq.read_table(f"{cfg.work_dir}/{fn}_p.parquet", memory_map=True)
+    #     )
+    #     dset.push_to_hub(f"Confirm-Labs/pile_{fn}", split=fn)
 
-    # NOTE: left these commented out so we don't accidentally overwrite...
     # tables = ["bigrams", "bigram_prefixes", "trigram_prefixes"]
     # pool = mp.Pool()
     # pool.starmap(duckdb_to_hf, [(cfg, t) for t in tables])
