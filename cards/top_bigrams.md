@@ -1,0 +1,9 @@
+- `id0`: the first token in the bigram
+- `id1`: the most common token following `id0` in The Pile
+- `sum_count`: the number of times that `id0` appears in The Pile.
+- `max_count`: the number of times that `id1` appears after `id0` in The Pile.
+- `frac_max`: `max_count / sum_count`
+- `token0`: the string representation of `id0`
+- `token1`: the string representation of `id1`
+- `seq`: the string representation of the bigram, `token0 token1`
+- `p_{model_size}`: the probability of the bigram under Pythia-{model_size} when prompted with `id0`.

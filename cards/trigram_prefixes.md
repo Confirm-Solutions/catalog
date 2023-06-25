@@ -1,0 +1,6 @@
+- `id0`: the first token in the trigram
+- `id1`: the second token in the trigram
+- `id2`: the most common token following `(id0, id1)` in The Pile
+- `sum_count`: the number of times that `(id0, id1)` appears in The Pile.
+- `max_count`: the number of times that `id2` appears after `(id0, id1)` in The Pile.
+- `frac_max`: `max_count / sum_count`

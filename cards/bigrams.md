@@ -1,0 +1,3 @@
+- `id0`: the first token in the bigram
+- `id1`: the second token in the bigram
+- `count`: the number of times the bigram appears in The Pile.

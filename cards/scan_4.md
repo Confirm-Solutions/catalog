@@ -1,0 +1,17 @@
+- `text`: The long prompt text with the the first token surrounded by square brackets.
+- `token_short`: The model's prediction for the most likely token given the short prompt.
+- `token_long`: The model's prediction for the most likely token given the long prompt.
+- `p_short`: The model's prediction for the probability of `token_short`.
+- `p_long`: The model's prediction for the probability of `token_long`.
+- `JS`: The Jensen-Shannon divergence between the model's distribution over tokens given the short prompt and the model's distribution over tokens given the long prompt.
+- `long_ids`: The ids of the tokens in the long prompt.
+- `short_max_id`: The id of `token_short`.
+- `long_max_id`: The id of `token_long`.
+- `context`: The surrounding text of the prompt.
+- `context_ids`: The ids of `context`.
+- `p_delta_max`: The largest difference in probability for any token between the short and long prompt.
+- `logit_excite_max`: The largest increase in logit for any token between the short and long prompt.
+- `logit_inhibit_max`: The largest decrease in logit for any token between the short and long prompt.
+- `batch`: The batch number of the prompt.
+- `sample`: The sample number of the prompt.
+- `start`: The start index of the prompt in the sample.

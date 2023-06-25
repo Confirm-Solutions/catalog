@@ -27,6 +27,7 @@ class Config:
     db_filename: str = "test/test.db"
     batches: int = 1
     vocab_size: int = 50432
+    batch_size: int = 2**17
 
 
 def step1_download(cfg: Config):
@@ -40,7 +41,6 @@ def step1_download(cfg: Config):
 
     The resulting Parquet files are in "{cfg.work_dir}/explode".
     """
-    batch_size = 2**17
     seq_len = 2048
 
     print("Loading dataset")
@@ -49,14 +49,14 @@ def step1_download(cfg: Config):
         local="./pile_tmp",
         cache_limit="50gb",
         keep_zip=False,
-        batch_size=batch_size,
-        predownload=batch_size * 2,
+        batch_size=cfg.batch_size,
+        predownload=cfg.batch_size * 2,
     )
 
     dataloader = DataLoader(
-        dataset, batch_size=batch_size, num_workers=12, prefetch_factor=2
+        dataset, batch_size=cfg.batch_size, num_workers=12, prefetch_factor=2
     )
-    n_batch = int(np.ceil(len(dataset) / batch_size))
+    n_batch = int(np.ceil(len(dataset) / cfg.batch_size))
 
     db = duckdb.connect()
     db.execute("SET enable_progress_bar=false;")
@@ -82,7 +82,9 @@ def step1_download(cfg: Config):
                 end_idx = -(ng - 1 - k) if k < ng - 1 else None
                 id_arrs.append(ids[:, k:end_idx])
             ngrams_arr = np.stack(id_arrs, axis=2).reshape((-1, ng))
-            pd.DataFrame(ngrams_arr, columns=[f"id{k}" for k in range(ng)])
+            ngram_df = pd.DataFrame(
+                ngrams_arr, columns=[f"id{k}" for k in range(ng)]
+            )  # noqa
             id_str = ",".join([f"id{k}" for k in range(ng)])
             db.execute(
                 f"""
@@ -254,6 +256,7 @@ def step5_trigrams(cfg: Config):
     for i in tqdm(range(cfg.id0_chunks)):
         db.execute(f"""INSERT INTO trigrams SELECT * FROM trigrams_{i}""")
 
+
 def add_tokens(df, db):
     if not isinstance(df, pd.DataFrame):
         df = df.df()
@@ -271,12 +274,13 @@ def step6_dataset(cfg: Config):
     db = duckdb.connect(cfg.db_filename)
 
     tokenizer = transformers.AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
-    pd.DataFrame(
+    tokens_df = pd.DataFrame(
         dict(
             id=np.arange(cfg.vocab_size),
             token=[tokenizer.decode(i) for i in range(cfg.vocab_size)],
         )
     )
+    tokens_df
     db.execute("create or replace table tokens as select * from tokens_df")
 
     # Construct bigram dataset consisting of the prefixes that are most
@@ -292,7 +296,7 @@ def step6_dataset(cfg: Config):
     # Construct trigram dataset consisting of the (id0, id1) prefixes that are
     # most predictive of id2:
     # - the predictiveness must be > X%
-    # - also, the bigram prefix must appear at least 100 times.
+    # - also, the bigram prefix must appear at least 1000 times.
     top_tri_df = db.query(
         f"""
         select * from trigram_prefixes
@@ -302,6 +306,7 @@ def step6_dataset(cfg: Config):
     ).df()
     top_tri_df = add_tokens(top_tri_df, db)
     top_tri_df.to_parquet(os.path.join(cfg.work_dir, "top_trigrams.parquet"))
+
 
 def predict_all_models(df):
     for batch_size, param_str in [
@@ -314,12 +319,14 @@ def predict_all_models(df):
         (256, "6.9b"),
         (128, "12b"),
     ]:
-        print("starting", model_info.name)
+        print("starting", param_str)
         start = time.time()
         with torch.device("cuda"):
             model = (
                 transformers.GPTNeoXForCausalLM.from_pretrained(
-                    f"EleutherAI/pythia-{param_str}-deduped", low_cpu_mem_usage=True, torch_dtype=torch.float16
+                    f"EleutherAI/pythia-{param_str}-deduped",
+                    low_cpu_mem_usage=True,
+                    torch_dtype=torch.float16,
                 )
                 .cuda()
                 .eval()

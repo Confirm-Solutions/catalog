@@ -28,6 +28,7 @@ Example from running this file:
 ╰─
 """
 
+import shlex
 import dataclasses
 import inspect
 import re
@@ -35,6 +36,7 @@ import time
 from typing import List, Union
 
 import typer
+import typer.testing
 import yaml
 
 
@@ -189,6 +191,19 @@ def run_steps(step_dict, steps: Union[str, int, List[int]], *args, **kwargs):
         step_dict[s](*args, **kwargs)
         end = time.time()
         print(f"Step {s} took {end - start:.2f} seconds")
+
+
+# -----------------------------------------------------------------------------
+
+
+def run(f, raw_args=None):
+    if raw_args is None:
+        return typer.run(f)
+    else:
+        app = typer.Typer(add_completion=False)
+        app.command()(f)
+        args = shlex.split(raw_args)
+        return typer.testing.CliRunner(app, args)
 
 
 # -----------------------------------------------------------------------------

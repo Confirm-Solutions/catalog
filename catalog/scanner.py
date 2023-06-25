@@ -1,10 +1,8 @@
 import os
 from dataclasses import dataclass
 
-import datasets
 import numpy as np
 import pandas as pd
-import pyarrow.parquet as pq
 import torch
 import transformers
 import typer
@@ -36,7 +34,14 @@ class StreamingTextDataset(StreamingDataset):
         )
 
 
-def get_model(name: str):
+def get_model(model_name: str):
+    return (
+        transformers.GPTNeoXForCausalLM.from_pretrained(
+            model_name, low_cpu_mem_usage=True, torch_dtype=torch.float16
+        )
+        .cuda()
+        .eval()
+    )
 
 
 def step1_scan(cfg: Config):
@@ -48,7 +53,7 @@ def step1_scan(cfg: Config):
         keep_zip=False,
         batch_size=cfg.batch_size,
     )
-
+    model = get_model(cfg.model_name)
     dataloader = DataLoader(
         dataset,
         batch_size=cfg.batch_size,
@@ -59,13 +64,6 @@ def step1_scan(cfg: Config):
     )
     n_batch = int(np.ceil(len(dataset) / cfg.batch_size))
 
-    model = (
-        transformers.GPTNeoXForCausalLM.from_pretrained(
-            cfg.model_name, low_cpu_mem_usage=True, torch_dtype=torch.float16
-        )
-        .cuda()
-        .eval()
-    )
     os.makedirs(cfg.work_dir, exist_ok=True)
 
     n_iters = min(n_batch, cfg.batches)
@@ -138,7 +136,7 @@ def step2_scan_filter(cfg: Config):
     batch_filenames = os.listdir(cfg.work_dir)
     batch_ids = [int(os.path.splitext(f)[0].split("_")[-1]) for f in batch_filenames]
     batch_ids.sort()
-    n_batches = max(batch_ids) + 1
+    n_batches = min(cfg.batches, max(batch_ids) + 1)
 
     examples = []
     for batch_idx in tqdm(range(n_batches)):
@@ -171,9 +169,9 @@ def step2_scan_filter(cfg: Config):
         def get_context(i, k=0):
             div = i // short.shape[1]
             mod = i % short.shape[1]
-            return samples[div, mod - k + 1 : mod + cfg.seq_len + 1 + k]
+            return div, (mod + 1), samples[div, mod - k + 1 : mod + cfg.seq_len + 1 + k]
 
-        assert (get_context(100000, 0) == short_2d[100000]).all()
+        assert (get_context(10, 0)[2] == short_2d[10]).all()
 
         high_post = np.where((pmax_long > 0.5) & (js > 0.5))[0]
         with torch.no_grad():
@@ -191,30 +189,39 @@ def step2_scan_filter(cfg: Config):
                 short_max_id = short_p.argmax(dim=-1).cpu().numpy()
                 long_p.max(dim=-1).values.to(torch.float32).cpu().numpy()
                 long_max_id = long_p.argmax(dim=-1).cpu().numpy()
-                context = tokenizer.batch_decode([get_context(i, k=5) for i in i_batch])
+                sample_idx, sample_start, context_ids = zip(
+                    *[get_context(i, k=5) for i in i_batch]
+                )
+                sample_idx = [x.item() for x in sample_idx]
+                sample_start = [x.item() for x in sample_start]
+                context_ids = [x.cpu().numpy() for x in context_ids]
+                context = tokenizer.batch_decode(context_ids)
+                long_ids = [
+                    long_batch_np[row] for row in range(long_batch_np.shape[0])
+                ]
+                text = ["[" + tokenizer.decode(x[0]) + "]" + tokenizer.decode(x[1:]) for x in long_ids]
                 examples.append(
                     dict(
-                        i=i_batch,
+                        text=text,
                         token_short=tokenizer.batch_decode(short_max_id),
                         token_long=tokenizer.batch_decode(long_max_id),
                         p_short=pmax_short[i_batch],
                         p_long=pmax_long[i_batch],
                         JS=js[i_batch],
-                        long_ids=[
-                            long_batch_np[row] for row in range(long_batch_np.shape[0])
-                        ],
+                        long_ids=long_ids,
                         short_max_id=short_max_id,
                         long_max_id=long_max_id,
                         context=context,
+                        context_ids=context_ids,
                         p_delta_max=pmax_delta[i_batch],
                         logit_excite_max=logit_excite_max[i_batch],
                         logit_inhibit_max=logit_inhibit_max[i_batch],
+                        batch=batch_idx,
+                        sample=sample_idx,
+                        start=sample_start,
                     )
                 )
     df = pd.concat([pd.DataFrame(e) for e in examples])
-    df["text"] = df["long_ids"].apply(
-        lambda x: "[" + tokenizer.decode(x[0]) + "]" + tokenizer.decode(x[1:])
-    )
     df = (
         df.drop_duplicates(subset=["text"])
         .sort_values(by="p_long", ascending=False)
@@ -225,6 +232,9 @@ def step2_scan_filter(cfg: Config):
 
 
 def step3_huggingface(cfg: Config):
+    import datasets
+    import pyarrow.parquet as pq
+
     dset = datasets.Dataset(
         pq.read_table(
             os.path.join(cfg.work_dir, os.pardir, "scan_filter.parquet"),

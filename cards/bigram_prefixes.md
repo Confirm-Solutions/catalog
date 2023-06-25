@@ -1,0 +1,5 @@
+- `id0`: the first token in the bigram
+- `id1`: the most common token following `id0` in The Pile
+- `sum_count`: the number of times that `id0` appears in The Pile.
+- `max_count`: the number of times that `id1` appears after `id0` in The Pile.
+- `frac_max`: `max_count / sum_count`

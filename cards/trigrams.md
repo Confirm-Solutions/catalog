@@ -1,0 +1,4 @@
+- `id0`: the first token in the trigram
+- `id1`: the second token in the trigram
+- `id2`: the third token in the trigram
+- `count`: the number of times the trigram appears in The Pile.
