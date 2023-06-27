@@ -196,10 +196,11 @@ def step2_scan_filter(cfg: Config):
                 sample_start = [x.item() for x in sample_start]
                 context_ids = [x.cpu().numpy() for x in context_ids]
                 context = tokenizer.batch_decode(context_ids)
-                long_ids = [
-                    long_batch_np[row] for row in range(long_batch_np.shape[0])
+                long_ids = [long_batch_np[row] for row in range(long_batch_np.shape[0])]
+                text = [
+                    "[" + tokenizer.decode(x[0]) + "]" + tokenizer.decode(x[1:])
+                    for x in long_ids
                 ]
-                text = ["[" + tokenizer.decode(x[0]) + "]" + tokenizer.decode(x[1:]) for x in long_ids]
                 examples.append(
                     dict(
                         text=text,

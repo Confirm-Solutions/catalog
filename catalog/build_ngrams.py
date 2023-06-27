@@ -85,6 +85,7 @@ def step1_download(cfg: Config):
             ngram_df = pd.DataFrame(
                 ngrams_arr, columns=[f"id{k}" for k in range(ng)]
             )  # noqa
+            ngram_df
             id_str = ",".join([f"id{k}" for k in range(ng)])
             db.execute(
                 f"""

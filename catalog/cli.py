@@ -28,10 +28,10 @@ Example from running this file:
 ╰─
 """
 
-import shlex
 import dataclasses
 import inspect
 import re
+import shlex
 import time
 from typing import List, Union
 
